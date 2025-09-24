@@ -35,7 +35,9 @@ function addLessonToArrange(id) {
                     const status = `总${course.maxCnt}/申${course.applyCnt}/录${course.enrollCnt}`
                     const teacher = course.techName
                     const weekString = course.useWeek1
-                    const timeString = course.classTime1
+                    const timeString1 = course.classTime1
+                    const timeString2 = course.classTime2 || ""
+                    const timeString3 = course.classTime3 || ""
                     const location = `${course.roomcode1}（${course.priorMajors}）`
                     const classroom = course.roomcode1
 
@@ -53,10 +55,31 @@ function addLessonToArrange(id) {
                     const weekEnd = course.useWeek1.replace(/周/g, "").split("-")[1]
                     let week = getArray(weekStart, weekEnd)
 
-                    const timeWeekDay = course.classTime1.split(".")[0]
-                    let timeTemp = course.classTime1.replace(/节/g, "").split(".")
-                    timeTemp.shift()
-                    const time = timeTemp.map(item => Number(item));
+                    let timeWeekDay1
+                    let timeWeekDay2
+                    let timeWeekDay3
+                    let time1
+                    let time2
+                    let time3
+
+                    timeWeekDay1 = course.classTime1.split(".")[0]
+                    let timeTemp1 = course.classTime1.replace(/节/g, "").split(".")
+                    timeTemp1.shift()
+                    time1 = timeTemp1.map(item => Number(item))
+
+                    if (timeString2) {
+                        timeWeekDay2 = course.classTime2.split(".")[0]
+                        let timeTemp2 = course.classTime2.replace(/节/g, "").split(".")
+                        timeTemp2.shift()
+                        time2 = timeTemp2.map(item => Number(item))
+                    }
+
+                    if (timeString3) {
+                        timeWeekDay3 = course.classTime3.split(".")[0]
+                        let timeTemp3 = course.classTime3.replace(/节/g, "").split(".")
+                        timeTemp3.shift()
+                        time3 = timeTemp3.map(item => Number(item))
+                    }
 
                     lessons.push({
                         selectCode: selectCode,
@@ -64,9 +87,15 @@ function addLessonToArrange(id) {
                         teacher: teacher,
                         week: week,
                         weekString: weekString,
-                        time: time,
-                        timeString: timeString,
-                        timeWeekDay: timeWeekDay,
+                        timeWeekDay1: timeWeekDay1,
+                        time1: time1,
+                        timeWeekDay2: timeWeekDay2,
+                        time2: time2,
+                        timeWeekDay3: timeWeekDay3,
+                        time3: time3,
+                        timeString1: timeString1,
+                        timeString2: timeString2,
+                        timeString3: timeString3,
                         location: location,
                         classroom: classroom,
                         selected: false,
@@ -191,7 +220,9 @@ function renderArrangeList() {
                 <mdui-icon style="font-size: 18px;" name="date_range"></mdui-icon>
                 <div style="margin-right: 0.5rem;">${lesson.weekString}</div>
                 <mdui-icon style="font-size: 18px;" name="schedule"></mdui-icon>
-                <div style="margin-right: 0.5rem;">${lesson.timeString}</div>
+                <div style="margin-right: 0.5rem;">${lesson.timeString1}</div>
+                ${lesson.timeString2 ? `<div style="margin-right: 0.5rem;">${lesson.timeString2}</div>` : ""}
+                ${lesson.timeString3 ? `<div style="margin-right: 0.5rem;">${lesson.timeString3}</div>` : ""}
                 <mdui-icon style="font-size: 18px;" name="flag"></mdui-icon>
                 <div style="margin-right: 0.5rem;">${lesson.status}</div>
                 <mdui-icon style="font-size: 18px;" name="location_on"></mdui-icon>
@@ -271,11 +302,31 @@ function renderPreviewTable(element) {
                 const weekEnd = lesson.useWeek1.replace(/周/g, "").split("-")[1]
                 let week = getArray(weekStart, weekEnd)
 
-                const timeWeekDay = lesson.classTime1.split(".")[0]
-                let timeTemp = lesson.classTime1.replace(/节/g, "").split(".")
-                timeTemp.shift()
-                const time = timeTemp.map(item => Number(item));
+                let timeWeekDay1
+                let time1
+                let timeWeekDay2
+                let time2
+                let timeWeekDay3
+                let time3
 
+                timeWeekDay1 = lesson.classTime1.split(".")[0]
+                let timeTemp1 = lesson.classTime1.replace(/节/g, "").split(".")
+                timeTemp1.shift()
+                time1 = timeTemp1.map(item => Number(item))
+
+                if (lesson.classTime2) {
+                    timeWeekDay2 = lesson.classTime2.split(".")[0]
+                    let timeTemp2 = lesson.classTime2.replace(/节/g, "").split(".")
+                    timeTemp2.shift()
+                    time2 = timeTemp2.map(item => Number(item))
+                }
+
+                if (lesson.classTime3) {
+                    timeWeekDay3 = lesson.classTime3.split(".")[0]
+                    let timeTemp3 = lesson.classTime3.replace(/节/g, "").split(".")
+                    timeTemp3.shift()
+                    time3 = timeTemp3.map(item => Number(item))
+                }
 
                 arrangePreviewTable.push({
                     type: 0,
@@ -284,14 +335,18 @@ function renderPreviewTable(element) {
                     teacher: teacher,
                     week: week,
                     weekString: lesson.useWeek1,
-                    timeWeekDay: timeWeekDay,
-                    time: time,
+                    timeWeekDay1: timeWeekDay1,
+                    time1: time1,
+                    timeWeekDay2: timeWeekDay2,
+                    time2: time2,
+                    timeWeekDay3: timeWeekDay3,
+                    time3: time3,
                     location: location
                 })
             } catch (e) {
-                console.error(e)
-                console.error(`课程 ${lesson.courseName} 解析失败，跳过`)
-                console.error(lesson)
+                // console.warn(e)
+                console.warn(`课程 ${lesson.courseName} 解析失败，跳过`)
+                // console.warn(lesson)
             }
 
         })
@@ -319,10 +374,31 @@ function renderPreviewTable(element) {
                 const weekEnd = lesson.useWeek1.replace(/周/g, "").split("-")[1]
                 let week = getArray(weekStart, weekEnd)
 
-                const timeWeekDay = lesson.classTime1.split(".")[0]
+                let timeWeekDay1
+                let time1
+                let timeWeekDay2
+                let time2
+                let timeWeekDay3
+                let time3
+
+                timeWeekDay1 = lesson.classTime1.split(".")[0]
                 let timeTemp = lesson.classTime1.replace(/节/g, "").split(".")
                 timeTemp.shift()
-                const time = timeTemp.map(item => Number(item));
+                time1 = timeTemp.map(item => Number(item))
+
+                if (lesson.classTime2) {
+                    timeWeekDay2 = lesson.classTime2.split(".")[0]
+                    let timeTemp2 = lesson.classTime2.replace(/节/g, "").split(".")
+                    timeTemp2.shift()
+                    time2 = timeTemp2.map(item => Number(item))
+                }
+
+                if (lesson.classTime3) {
+                    timeWeekDay3 = lesson.classTime3.split(".")[0]
+                    let timeTemp3 = lesson.classTime3.replace(/节/g, "").split(".")
+                    timeTemp3.shift()
+                    time3 = timeTemp3.map(item => Number(item))
+                }
 
                 arrangePreviewTable.push({
                     type: 1,
@@ -331,14 +407,18 @@ function renderPreviewTable(element) {
                     teacher: teacher,
                     week: week,
                     weekString: lesson.useWeek1,
-                    timeWeekDay: timeWeekDay,
-                    time: time,
+                    timeWeekDay1: timeWeekDay1,
+                    time1: time1,
+                    timeWeekDay2: timeWeekDay2,
+                    time2: time2,
+                    timeWeekDay3: timeWeekDay3,
+                    time3: time3,
                     location: location
                 })
             } catch (e) {
-                console.warn(e)
+                // console.warn(e)
                 console.warn(`课程 ${lesson.courseName} 解析失败，跳过`)
-                console.warn(lesson)
+                // console.warn(lesson)
             }
 
         })
@@ -355,9 +435,15 @@ function renderPreviewTable(element) {
                             teacher: lesson.teacher,
                             week: lesson.week,
                             weekString: lesson.weekString,
-                            timeWeekDay: lesson.timeWeekDay,
-                            time: lesson.time,
-                            timeString: lesson.timeString,
+                            timeWeekDay1: lesson.timeWeekDay1,
+                            time1: lesson.time1,
+                            timeWeekDay2: lesson.timeWeekDay2,
+                            time2: lesson.time2,
+                            timeWeekDay3: lesson.timeWeekDay3,
+                            time3: lesson.time3,
+                            timeString1: lesson.timeString1,
+                            timeString2: lesson.timeString2,
+                            timeString3: lesson.timeString3,
                             location: lesson.classroom
                         })
                     }
@@ -408,12 +494,12 @@ function renderPreviewTable(element) {
                         "周六": td6,
                         "周日": td7
                     }
-                    if (day2TdMap[lesson.timeWeekDay]) {
-                        if (lesson.time[0] == i) {
-                            const tdElement = day2TdMap[lesson.timeWeekDay]
-                            tdElement.rowSpan = lesson.time.length
-                            if (tdRowToSkipMap[lesson.timeWeekDay] == 0) {
-                                tdRowToSkipMap[lesson.timeWeekDay] = 0 - (lesson.time.length - 1)
+                    if (day2TdMap[lesson.timeWeekDay1]) {
+                        if (lesson.time1[0] == i) {
+                            const tdElement = day2TdMap[lesson.timeWeekDay1]
+                            tdElement.rowSpan = lesson.time1.length
+                            if (tdRowToSkipMap[lesson.timeWeekDay1] == 0) {
+                                tdRowToSkipMap[lesson.timeWeekDay1] = 0 - (lesson.time1.length - 1)
                             }
                             tdElement.style["vertical-align"] = "top"
                             tdElement.style["background-color"] = bgColorMap[lesson.type]
@@ -424,8 +510,43 @@ function renderPreviewTable(element) {
                             `
                         }
                     } else {
-                        console.error(`未识别的星期: ${lesson.timeWeekDay}`)
+                        console.error(`未识别的星期: ${lesson.timeWeekDay1}`)
                     }
+
+                    if (lesson.timeWeekDay2 && day2TdMap[lesson.timeWeekDay2]) {
+                        if (lesson.time2[0] == i) {
+                            const tdElement = day2TdMap[lesson.timeWeekDay2]
+                            tdElement.rowSpan = lesson.time2.length
+                            if (tdRowToSkipMap[lesson.timeWeekDay2] == 0) {
+                                tdRowToSkipMap[lesson.timeWeekDay2] = 0 - (lesson.time2.length - 1)
+                            }
+                            tdElement.style["vertical-align"] = "top"
+                            tdElement.style["background-color"] = bgColorMap[lesson.type]
+                            tdElement.innerHTML = `
+                            <div style="font-size: larger;font-weight: bold;">${lesson.name}</div>
+                            <div style="opacity: 0.75;">${lesson.weekString} · ${lesson.location}</div>
+                            <div style="opacity: 0.35;">${lesson.teacher}</div>
+                            `
+                        }
+                    }
+
+                    if (lesson.timeWeekDay3 && day2TdMap[lesson.timeWeekDay3]) {
+                        if (lesson.time3[0] == i) {
+                            const tdElement = day2TdMap[lesson.timeWeekDay3]
+                            tdElement.rowSpan = lesson.time3.length
+                            if (tdRowToSkipMap[lesson.timeWeekDay3] == 0) {
+                                tdRowToSkipMap[lesson.timeWeekDay3] = 0 - (lesson.time3.length - 1)
+                            }
+                            tdElement.style["vertical-align"] = "top"
+                            tdElement.style["background-color"] = bgColorMap[lesson.type]
+                            tdElement.innerHTML = `
+                            <div style="font-size: larger;font-weight: bold;">${lesson.name}</div>
+                            <div style="opacity: 0.75;">${lesson.weekString} · ${lesson.location}</div>
+                            <div style="opacity: 0.35;">${lesson.teacher}</div>
+                            `
+                        }
+                    }
+
                 }
             })
 
@@ -502,7 +623,7 @@ function renderPreviewTable(element) {
 
         }
 
-        updateConflictHightlight()
+        measureTime(updateConflictHightlight)
 
         if (element) {
             // 移除loading 属性
@@ -515,20 +636,55 @@ function renderPreviewTable(element) {
 function updateConflictHightlight() {
 
     function hasCommonItems(arr1, arr2) {
-        const set1 = new Set(arr1);
+        const set1 = new Set(arr1)
         return arr2.some(item => set1.has(item))
     }
-
 
     arrangeLessonList.forEach(item => {
         item.lessons.forEach(lesson => {
             let conflict = false
             arrangePreviewTable.forEach(previewLesson => {
                 if (previewLesson.selectCode == lesson.selectCode) return
-                if (previewLesson.timeWeekDay == lesson.timeWeekDay && hasCommonItems(previewLesson.time, lesson.time) && hasCommonItems(previewLesson.week, lesson.week)) {
+                if (!lesson.week) return
+
+                if (previewLesson.time1 && lesson.time1 && previewLesson.timeWeekDay1 == lesson.timeWeekDay1 && hasCommonItems(previewLesson.time1, lesson.time1) && hasCommonItems(previewLesson.week, lesson.week)) {
+                    conflict = true
+                }
+
+                if (previewLesson.time1 && lesson.time2 && previewLesson.timeWeekDay1 == lesson.timeWeekDay2 && hasCommonItems(previewLesson.time1, lesson.time2) && hasCommonItems(previewLesson.week, lesson.week)) {
+                    conflict = true
+                }
+
+                if (previewLesson.time1 && lesson.time3 && previewLesson.timeWeekDay1 == lesson.timeWeekDay3 && hasCommonItems(previewLesson.time1, lesson.time3) && hasCommonItems(previewLesson.week, lesson.week)) {
+                    conflict = true
+                }
+
+                if (previewLesson.time2 && lesson.time1 && previewLesson.timeWeekDay2 == lesson.timeWeekDay1 && hasCommonItems(previewLesson.time2, lesson.time1) && hasCommonItems(previewLesson.week, lesson.week)) {
+                    conflict = true
+                }
+
+                if (previewLesson.time2 && lesson.time2 && previewLesson.timeWeekDay2 == lesson.timeWeekDay2 && hasCommonItems(previewLesson.time2, lesson.time2) && hasCommonItems(previewLesson.week, lesson.week)) {
+                    conflict = true
+                }
+
+                if (previewLesson.time2 && lesson.time3 && previewLesson.timeWeekDay2 == lesson.timeWeekDay3 && hasCommonItems(previewLesson.time2, lesson.time3) && hasCommonItems(previewLesson.week, lesson.week)) {
+                    conflict = true
+                }
+
+                if (previewLesson.time3 && lesson.time1 && previewLesson.timeWeekDay3 == lesson.timeWeekDay1 && hasCommonItems(previewLesson.time3, lesson.time1) && hasCommonItems(previewLesson.week, lesson.week)) {
+                    conflict = true
+                }
+
+                if (previewLesson.time3 && lesson.time2 && previewLesson.timeWeekDay3 == lesson.timeWeekDay2 && hasCommonItems(previewLesson.time3, lesson.time2) && hasCommonItems(previewLesson.week, lesson.week)) {
+                    conflict = true
+                }
+
+                if (previewLesson.time3 && lesson.time3 && previewLesson.timeWeekDay3 == lesson.timeWeekDay3 && hasCommonItems(previewLesson.time3, lesson.time3) && hasCommonItems(previewLesson.week, lesson.week)) {
                     conflict = true
                 }
             })
+
+            // I hate this but it works :P
 
             lesson.conflict = conflict
 

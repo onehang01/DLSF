@@ -5,12 +5,12 @@
   </div>
   <div style="margin-bottom: 1rem;opacity: 0.75;">课程表。</div>
   <div style="display: flex;align-items: center;margin-bottom: 1rem;">
-    <mdui-select id="input-table-term" class="semester-select" variant="outlined" value="item-1" style="width: 10rem;">
+    <mdui-select id="input-table-term" class="semester-select" variant="outlined" value="item-1" style="width: 10rem;" onchange="buttonTableUpdate()">
     </mdui-select>
 
-    <mdui-text-field id="input-table-stdudent-id" style="width: 15rem;margin-left:1rem;" clearable class="darkside" label="学号（Darkside）" value=""></mdui-text-field>
+    <mdui-text-field id="input-table-stdudent-id" style="width: 15rem;margin-left:1rem;" clearable class="darkside"
+      label="学号（Darkside）" value=""></mdui-text-field>
 
-    <mdui-button style="margin-left:1rem;" onclick="buttonTableUpdate()">查询</mdui-button>
   </div>
 
   <table class="mdui-table" style="margin: 0; table-layout: fixed; height: 10rem;vertical-align: top;">

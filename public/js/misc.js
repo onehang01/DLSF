@@ -68,10 +68,11 @@ function generateCli() {
         _.push("-t")
         _.push(`${target.courseCode}:${target.id}`)
     })
-    _.push("-u")
-    _.push(localStorage.getItem("DLSF_username"))
-    _.push("-p")
-    _.push(localStorage.getItem("DLSF_password"))
+    const cookie = JSON.parse(localStorage.getItem("DLSF_cookie"))
+    _.push("-j")
+    _.push(cookie.JSESSIONID)
+    _.push("-n")
+    _.push(cookie.array)
     _.push("-i")
     _.push(interval / 1000)
     checkIfFull ? "" : _.push("--nc")
@@ -87,4 +88,21 @@ function copyToClipboard(element) {
     urlInput.select()
     document.execCommand('copy')
     mdui.snackbar({ "message": "复制成功" })
+}
+
+
+async function measureTime(fn, ...args) {
+    const isAsync = fn.constructor.name === 'AsyncFunction'
+    const start = performance.now()
+
+    let result
+    if (isAsync) {
+        result = await fn(...args)
+    } else {
+        result = fn(...args)
+    }
+
+    const end = performance.now()
+    console.log(`${fn.name || 'anonymous'} 执行耗时: ${(end - start).toFixed(3)} ms`)
+    return result
 }

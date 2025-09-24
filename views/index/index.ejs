@@ -123,45 +123,45 @@
 
       <%- include('./dialogs.ejs') %>
 
-      <mdui-dialog headline="选择要添加的课程..." id="dialog-target-add">
-        <div id="dialog-target-add-title" style="margin-bottom: 1rem;opacity: 0.75;font-size: large;">
+        <mdui-dialog headline="选择要添加的课程..." id="dialog-target-add">
+          <div id="dialog-target-add-title" style="margin-bottom: 1rem;opacity: 0.75;font-size: large;">
 
-        </div>
-        <table class="mdui-table" style="margin: 0.5rem;width: 60rem;">
-          <thead>
-            <tr>
-              <th>选课序号</th>
-              <th>最大/申请/已录</th>
-              <th>任课教师</th>
-              <th>上课周次</th>
-              <th>上课时间</th>
-              <th>上课地点</th>
-              <th>信息</th>
-              <th>操作</th>
-            </tr>
-          </thead>
-          <tbody id="target-add-tbody">
+          </div>
+          <table class="mdui-table" style="margin: 0.5rem;width: 60rem;">
+            <thead>
+              <tr>
+                <th>选课序号</th>
+                <th>最大/申请/已录</th>
+                <th>任课教师</th>
+                <th>上课周次</th>
+                <th>上课时间</th>
+                <th>上课地点</th>
+                <th>信息</th>
+                <th>操作</th>
+              </tr>
+            </thead>
+            <tbody id="target-add-tbody">
 
-          </tbody>
+            </tbody>
 
-        </table>
+          </table>
 
-        <mdui-button slot="action" variant="text" onclick="dialogTargetAddClose()">取消</mdui-button>
+          <mdui-button slot="action" variant="text" onclick="dialogTargetAddClose()">取消</mdui-button>
 
-        <script>
-          // 弹出窗口样式注入
-          let style = document.createElement('style')
-          style.innerHTML = `
+          <script>
+            // 弹出窗口样式注入
+            let style = document.createElement('style')
+            style.innerHTML = `
               .panel {max-width: 90rem !important;}
               .body::-webkit-scrollbar {width: 6px;height: 6px;}
               .body::-webkit-scrollbar-track {background-color: #8888880F;}
               .body::-webkit-scrollbar-thumb {background-color: #88888880;border-radius: 4px;}
               .body::-webkit-scrollbar-thumb:hover {background-color: #555;}
               `
-          document.getElementById("dialog-target-add").shadowRoot.appendChild(style)
-        </script>
+            document.getElementById("dialog-target-add").shadowRoot.appendChild(style)
+          </script>
 
-      </mdui-dialog>
+        </mdui-dialog>
 
 
     </mdui-layout-main>
@@ -181,7 +181,7 @@
 
   <script>
     if ("serviceWorker" in navigator) {
-      window.addEventListener("load", function() {
+      window.addEventListener("load", function () {
         navigator.serviceWorker
           .register("js/service-worker.js")
           .then(res => console.log("service worker registered"))

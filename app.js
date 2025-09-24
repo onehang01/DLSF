@@ -362,9 +362,9 @@ app.get('/api/dlsf/loginGetToken', (req, res) => {
                 logger.debug(`Ticket: ${result.response.headers.location}`)
                 axios.get(result.response.headers.location, {
                     maxRedirects: 0
-                })
+                }).catch(resultFinal => {
                     // 情况 1：不需要企业微信验证码
-                    .catch(resultFinal => {
+                    try {
                         const setCookie = resultFinal.response.headers['set-cookie']
                         logger.debug(`Final Cookies: ${setCookie}`)
                         const JSESSIONID = setCookie[0].match(/JSESSIONID=(.*?);/)[1]
@@ -373,91 +373,94 @@ app.get('/api/dlsf/loginGetToken', (req, res) => {
                         logger.debug(`Array(newjwgl): ${array}`)
                         logger.info(`Login Success!`)
                         res.json({ "DLSF_SUCCESS": true, "JSESSIONID": JSESSIONID, "array": array })
-                        return
-                    })
-                    // 情况 2：需要企业微信验证码
-                    .then(verifyPage => {
+                    } catch (error) {
+                        logger.error("获取 JSESSIONID 失败：", error)
+                        res.json({ "DLSF_SUCCESS": false, "message": "自动登陆失败，请手动填写 Cookie。" })
+                    }
+                    // }).then(verifyPage => {
+                    //     // 之前教务系统短期使用过这种方案，但是自动登录过程似乎有一些bug，所以这里就不做处理了
+                    //     // 情况 2：需要企业微信验证码
+                    //     axios.post("https://cas.dhu.edu.cn/esc-sso/message/code", {
+                    //         'username': username,
+                    //         'type': 'workwechat'
+                    //     }, {
+                    //         headers: {
+                    //             "Cookie": cookieHeader,
+                    //             "Content-Type": "application/json"
+                    //         }
+                    //     }).then(result => {
+                    //         logger.info("CAS 验证码已发送至企业微信")
+                    //         setTimeout(() => {
+                    //             wsBroadcast(JSON.stringify({ "type": "workwechat-verify" }))
+                    //         }, 2000)
+                    //         let listener = (event) => {
+                    //             logger.debug("Received WebSocket Message", event)
+                    //             try {
+                    //                 const message = JSON.parse(event)
+                    //                 if (message.type == "workwechat-verify-code") {
+                    //                     const code = message.data
+                    //                     logger.info("CAS 企业微信验证码：" + code)
+                    //                     wsEvent.off("message", listener)
+                    //                     axios.post("https://cas.dhu.edu.cn/esc-sso/app/enhance/login", {
+                    //                         "authType": "webWorkWechatMsgAuth",
+                    //                         "dataField": {
+                    //                             "username": username,
+                    //                             "password": "",
+                    //                             "msgCode": code,
+                    //                             "vcode": "",
+                    //                             "appId": "1947788490737777188",
+                    //                             "appUrl": "https%3A%2F%2Fcas.dhu.edu.cn%2Fesc-sso%2Flogin%3Fservice%3Dhttps%253A%252F%252Fjwgl.dhu.edu.cn%252Fdhu%252FcasLogin"
+                    //                         },
+                    //                         "redirectUri": ""
+                    //                     }, {
+                    //                         headers: {
+                    //                             "Cookie": cookieHeader,
+                    //                             "Content-Type": "application/json"
+                    //                         }
+                    //                     }).then(result => {
+                    //                         axios.get('https://cas.dhu.edu.cn/esc-sso/login', {
+                    //                             maxRedirects: 0,
+                    //                             params: {
+                    //                                 'service': 'https://jwgl.dhu.edu.cn/dhu/casLogin'
+                    //                             }, headers: {
+                    //                                 'Cookie': cookieHeader
+                    //                             }
+                    //                         }).catch(result => {
+                    //                             logger.debug(`Ticket: ${result.response.headers.location}`)
+                    //                             axios.get(result.response.headers.location, {
+                    //                                 maxRedirects: 0
+                    //                             }).catch(resultFinal => {
+                    //                                 if (resultFinal.response) {
+                    //                                     const setCookie = resultFinal.response.headers['set-cookie']
+                    //                                     logger.debug(`Final Cookies: ${setCookie}`)
+                    //                                     const JSESSIONID = setCookie[0].match(/JSESSIONID=(.*?);/)[1]
+                    //                                     const array = setCookie[1].match(/newjwgl=(.*?);/)[1]
+                    //                                     logger.debug(`JSESSIONID: ${JSESSIONID}`)
+                    //                                     logger.debug(`Array(newjwgl): ${array}`)
+                    //                                     logger.info(`Login Success!`)
+                    //                                     res.json({ "DLSF_SUCCESS": true, "JSESSIONID": JSESSIONID, "array": array })
+                    //                                 } else {
+                    //                                     logger.error("登录失败")
+                    //                                     res.json({ "DLSF_SUCCESS": false, "message": "登录失败" })
+                    //                                 }
+                    //                             })
+                    //                         })
+                    //                     })
+                    //                 }
+                    //             } catch (error) {
+                    //                 logger.error("Failed to parse WebSocket message", error)
+                    //             }
+                    //         }
+                    //         wsEvent.on("message", listener)
+                    //     })
 
-                        axios.post("https://cas.dhu.edu.cn/esc-sso/message/code", {
-                            'username': username,
-                            'type': 'workwechat'
-                        }, {
-                            headers: {
-                                "Cookie": cookieHeader,
-                                "Content-Type": "application/json"
-                            }
-                        }).then(result => {
-                            logger.info("CAS 验证码已发送至企业微信")
-                            setTimeout(() => {
-                                wsBroadcast(JSON.stringify({ "type": "workwechat-verify" }))
-                            }, 2000)
-                            let listener = (event) => {
-                                logger.debug("Received WebSocket Message", event)
-                                try {
-                                    const message = JSON.parse(event)
-                                    if (message.type == "workwechat-verify-code") {
-                                        const code = message.data
-                                        logger.info("CAS 企业微信验证码：" + code)
-                                        wsEvent.off("message", listener)
-                                        axios.post("https://cas.dhu.edu.cn/esc-sso/app/enhance/login", {
-                                            "authType": "webWorkWechatMsgAuth",
-                                            "dataField": {
-                                                "username": username,
-                                                "password": "",
-                                                "msgCode": code,
-                                                "vcode": "",
-                                                "appId": "1947788490737777188",
-                                                "appUrl": "https%3A%2F%2Fcas.dhu.edu.cn%2Fesc-sso%2Flogin%3Fservice%3Dhttps%253A%252F%252Fjwgl.dhu.edu.cn%252Fdhu%252FcasLogin"
-                                            },
-                                            "redirectUri": ""
-                                        }, {
-                                            headers: {
-                                                "Cookie": cookieHeader,
-                                                "Content-Type": "application/json"
-                                            }
-                                        }).then(result => {
-                                            axios.get('https://cas.dhu.edu.cn/esc-sso/login', {
-                                                maxRedirects: 0,
-                                                params: {
-                                                    'service': 'https://jwgl.dhu.edu.cn/dhu/casLogin'
-                                                }, headers: {
-                                                    'Cookie': cookieHeader
-                                                }
-                                            }).catch(result => {
-                                                logger.debug(`Ticket: ${result.response.headers.location}`)
-                                                axios.get(result.response.headers.location, {
-                                                    maxRedirects: 0
-                                                }).catch(resultFinal => {
-                                                    if (resultFinal.response) {
-                                                        const setCookie = resultFinal.response.headers['set-cookie']
-                                                        logger.debug(`Final Cookies: ${setCookie}`)
-                                                        const JSESSIONID = setCookie[0].match(/JSESSIONID=(.*?);/)[1]
-                                                        const array = setCookie[1].match(/newjwgl=(.*?);/)[1]
-                                                        logger.debug(`JSESSIONID: ${JSESSIONID}`)
-                                                        logger.debug(`Array(newjwgl): ${array}`)
-                                                        logger.info(`Login Success!`)
-                                                        res.json({ "DLSF_SUCCESS": true, "JSESSIONID": JSESSIONID, "array": array })
-                                                    } else {
-                                                        logger.error("登录失败")
-                                                        res.json({ "DLSF_SUCCESS": false, "message": "登录失败" })
-                                                    }
-                                                })
-                                            })
-                                        })
-                                    }
-                                } catch (error) {
-                                    logger.error("Failed to parse WebSocket message", error)
-                                }
-                            }
-                            wsEvent.on("message", listener)
+                    //         .catch(error => {
+                    //             logger.error(`CAS LOGIN ERROR: ${error}`)
+                    //         })
 
-                        }).catch(error => {
-                            logger.error(`CAS LOGIN ERROR: ${error}`)
-                        })
-
-                    }).catch(error => {
-                        logger.error(`CAS LOGIN ERROR: ${error}`)
-                    })
+                }).catch(error => {
+                    logger.error(`CAS LOGIN ERROR: ${error}`)
+                })
 
             }).catch(error => {
                 logger.error(`POST Login ERROR: ${error}`)
@@ -534,7 +537,7 @@ const wsClients = new Set()
 
 wss.on('connection', (ws) => {
     wsClients.add(ws)
-    ws.send("Hello DLSF")
+    ws.send(JSON.stringify({ "type": "dlsf-ws-ready" }))
 
     ws.on('close', () => {
         wsClients.delete(ws)

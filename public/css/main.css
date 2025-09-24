@@ -92,3 +92,30 @@ body {
 .button-icon-selected {
   background-color: rgba(var(--mdui-color-primary-container));
 }
+
+.aefp {
+  font-size: 2rem;
+  font-weight: bold;
+  line-height: normal;
+  align-self: flex-end;
+  opacity: 0.75;
+
+  background: linear-gradient(90deg,
+      red, orange, yellow, green, cyan, blue, violet, red);
+  background-size: 200% 100%;
+  -webkit-background-clip: text;
+  color: transparent;
+
+  animation: marqueeGradient 10s linear infinite;
+  transition: font-size 1s;
+}
+
+@keyframes marqueeGradient {
+  0% {
+    background-position: 0% 0%;
+  }
+
+  100% {
+    background-position: -200% 0%;
+  }
+}
