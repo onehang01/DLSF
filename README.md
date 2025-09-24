@@ -1,3 +1,6 @@
+## acta est fabula, plaudite
+本项目已临近生命周期的终点。如果你有意向接手本项目，请在 Github 上联系我。
+
 # DLSF
 DLS Fucker  
 
@@ -5,6 +8,8 @@ DLS Fucker
 > ならば咲かせよ刹那に飾る花。
 
 ![](/pics/1.webp)
+
+
 
 ## Install
 ```
