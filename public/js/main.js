@@ -145,6 +145,113 @@ async function loginUser() {
     }
 }
 
+// 获取某门课的全部教学班信息
+async function getAccData(courseCode) {
+    const result = await api("/selectcourse/initACC", { courseCode: courseCode })
+    if (!result || !result.aaData) {
+        return null
+    }
+    return result
+}
+
+// 按选课序号查找教学班详情
+async function getAccLessonByCttId(courseCode, cttId) {
+    const result = await getAccData(courseCode)
+    if (!result) {
+        return null
+    }
+    return result.aaData.find(course => String(course.cttId) === String(cttId)) || null
+}
+
+// 查询当前是否还选着旧老师的课
+async function getSelectedCourseByCttId(cttId) {
+    const result = await api("/selectcourse/initSelCourses")
+    if (!result || !result.enrollCourses) {
+        return null
+    }
+    return result.enrollCourses.find(course => String(course.jxbdm) === String(cttId)) || null
+}
+
+// 调用退课接口
+async function cancelCourse(courseCode, classNo) {
+    return await api("/selectcourse/cancelSC", {
+        courseCode: courseCode,
+        classNo: classNo,
+        cancelType: 1
+    })
+}
+
+// 调用选课接口
+async function selectCourse(cttId) {
+    return await api("/selectcourse/scSubmit", { cttId: cttId })
+}
+
+// 判断目标教学班是否还有余量
+function hasAvailableSeat(lessonData) {
+    return Number(lessonData.maxCnt) > Number(lessonData.enrollCnt)
+}
+
+// 判断是否是成功响应
+function isSuccessResult(result) {
+    if (!result) {
+        return false
+    }
+    if (result.success === true || result.DLSF_SUCCESS === true) {
+        return true
+    }
+    if (typeof result.msg === "string" && (result.msg.includes("成功") || result.msg.includes("已经选了"))) {
+        return true
+    }
+    return false
+}
+
+// 判断是否命中了验证码风控
+function isCaptchaResult(result) {
+    return result && result.msg == "F"
+}
+
+// 统一渲染接口返回内容
+function setWorkerRawText(element, result) {
+    element.innerHTML = JSON.stringify(result, null, 2).replace(/ /g, "&nbsp;").replace(/\n/g, "<br>")
+    element.style["opacity"] = "1"
+}
+
+// 停止单个 worker，避免重复写同一段逻辑
+function stopWorkerByTarget(target, activeWorker) {
+    const workerItem = workers.find(worker => worker.target == target)
+    if (workerItem) {
+        clearInterval(workerItem.worker)
+    }
+    return activeWorker - 1
+}
+
+// 换课模式下，先退掉当前已选的旧课
+async function cancelSwapFromCourse(target) {
+    if (!target.swapFromId) {
+        return { skipped: true, reason: "no swapFromId" }
+    }
+
+    const selectedCourse = await getSelectedCourseByCttId(target.swapFromId)
+    if (!selectedCourse) {
+        return { skipped: true, reason: "old course not selected" }
+    }
+
+    const oldLessonData = await getAccLessonByCttId(target.courseCode, target.swapFromId)
+    if (!oldLessonData) {
+        return { success: false, reason: "old lesson data not found" }
+    }
+
+    if (!oldLessonData.classNo) {
+        return { success: false, reason: "classNo missing" }
+    }
+
+    const result = await cancelCourse(target.courseCode, oldLessonData.classNo)
+    return {
+        success: isSuccessResult(result),
+        raw: result
+    }
+}
+
 function switchMain() {
     let s = document.getElementById("switch-main")
     let activeWorker = undefined
@@ -152,56 +259,82 @@ function switchMain() {
         console.log("Start!")
         targetList.forEach((target, i) => {
             setTimeout(() => {
-                let firstTry = true
+                // 防止上一次请求还没结束时又发起新请求
+                let busy = false
                 let worker = setInterval(async () => {
+                    if (busy) {
+                        return
+                    }
+                    busy = true
+
                     let w = document.getElementById(`worker-status-${i + 1}`)
                     let r = document.getElementById(`worker-raw-text-${i + 1}`)
                     w.children[0].style["background"] = "lightgoldenrodyellow"
                     w.children[1].innerHTML = `正在发送请求`
                     r.style["opacity"] = "0.3"
 
-                    let isFull
-                    let countString
-                    if (checkIfFull) {
-                        await api("/selectcourse/initACC", { courseCode: target.courseCode, _: target.id }).then((result) => {
-                            lessonData = result.aaData.filter(course => course.cttId == target.id)[0]
-                            if (lessonData.maxCnt > lessonData.enrollCnt) {
-                                isFull = false
-                            } else {
-                                isFull = true
-                                countString = `最大：${lessonData.maxCnt}<br>已录：${lessonData.enrollCnt}<br>申请：${lessonData.applyCnt}`
-                            }
-                        })
-                    }
+                    try {
+                        let lessonData = await getAccLessonByCttId(target.courseCode, target.id)
+                        if (!lessonData) {
+                            w.children[0].style["background"] = "lightgray"
+                            w.children[1].innerHTML = "课程信息获取失败，即将重试..."
+                            return
+                        }
 
-                    if (firstTry || !isFull) {
-                        api("/selectcourse/scSubmit", { cttId: target.id }).then(result => {
-                            r.innerHTML = JSON.stringify(result, null, 2).replace(/ /g, "&nbsp;").replace(/\n/g, "<br>")
+                        if (checkIfFull && !hasAvailableSeat(lessonData)) {
+                            r.innerHTML = `最大：${lessonData.maxCnt}<br>已录：${lessonData.enrollCnt}<br>申请：${lessonData.applyCnt}`
                             r.style["opacity"] = "1"
-                            if (result.msg == "F") {
-                                w.children[0].style["background"] = "lightcoral"
-                                w.children[1].innerHTML = `出现验证码，请降低请求速度，本线程已停止！`
-                                clearInterval(workers.filter(worker => worker.target == target)[0].worker)
-                                activeWorker--
-                                document.getElementById("switch-main-status").children[2].innerHTML = `脚本运行中 (${activeWorker}/${targetList.length})`
-                            } else if (result.msg == "你这门课已经选了,不允许再次选择了！" || result.success == true) {
-                                w.children[0].style["background"] = "lightgreen"
-                                w.children[1].innerHTML = `抢课成功！`
-                                clearInterval(workers.filter(worker => worker.target == target)[0].worker)
-                                activeWorker--
-                                document.getElementById("switch-main-status").children[2].innerHTML = `脚本运行中 (${activeWorker}/${targetList.length})`
-                            } else {
-                                w.children[0].style["background"] = "lightgray"
-                                w.children[1].innerHTML = `抢课失败，即将重试...`
+                            w.children[0].style["background"] = "lightgray"
+                            w.children[1].innerHTML = "课程人数已满，即将重试..."
+                            return
+                        }
+
+                        // 有换课来源时，先退掉旧老师的课
+                        if (target.swapFromId) {
+                            w.children[1].innerHTML = "发现目标课有余量，正在检查旧课..."
+                            const cancelResult = await cancelSwapFromCourse(target)
+
+                            if (cancelResult.raw) {
+                                setWorkerRawText(r, cancelResult.raw)
                             }
-                        })
-                    } else {
-                        r.innerHTML = countString
-                        r.style["opacity"] = "1"
+
+                            if (cancelResult.success === false) {
+                                w.children[0].style["background"] = "lightgray"
+                                w.children[1].innerHTML = "退课失败，即将重试..."
+                                return
+                            }
+
+                            if (cancelResult.skipped && cancelResult.reason == "old course not selected") {
+                                w.children[1].innerHTML = "旧课已不存在，直接尝试选择新老师..."
+                            } else if (!cancelResult.skipped) {
+                                w.children[1].innerHTML = "旧课退课成功，正在选择新老师..."
+                            }
+                        }
+
+                        const selectResult = await selectCourse(target.id)
+                        setWorkerRawText(r, selectResult)
+
+                        if (isCaptchaResult(selectResult)) {
+                            w.children[0].style["background"] = "lightcoral"
+                            w.children[1].innerHTML = `出现验证码，请降低请求速度，本线程已停止！`
+                            activeWorker = stopWorkerByTarget(target, activeWorker)
+                            document.getElementById("switch-main-status").children[2].innerHTML = `脚本运行中 (${activeWorker}/${targetList.length})`
+                        } else if (isSuccessResult(selectResult)) {
+                            w.children[0].style["background"] = "lightgreen"
+                            w.children[1].innerHTML = target.swapFromId ? `换课成功！` : `抢课成功！`
+                            activeWorker = stopWorkerByTarget(target, activeWorker)
+                            document.getElementById("switch-main-status").children[2].innerHTML = `脚本运行中 (${activeWorker}/${targetList.length})`
+                        } else {
+                            w.children[0].style["background"] = "lightgray"
+                            w.children[1].innerHTML = `抢课失败，即将重试...`
+                        }
+                    } catch (error) {
+                        console.error(error)
                         w.children[0].style["background"] = "lightgray"
-                        w.children[1].innerHTML = "课程人数已满，即将重试..."
+                        w.children[1].innerHTML = "请求异常，即将重试..."
+                    } finally {
+                        busy = false
                     }
-                    firstTry = false
                 }, interval)
                 workers.push({ "target": target, "worker": worker })
 
@@ -268,6 +401,7 @@ function targetListRender() {
         t.innerHTML += `
         <tr>
             <td>${target.id}</td>
+            <td>${target.swapFromId || "-"}</td>
             <td>${target.name}</td>
             <th>${target.num}</th>
             <td>${target.teacher}</td>
@@ -284,14 +418,34 @@ function targetListRender() {
     })
 }
 
+// 清理输入内容，避免把异常字符直接写进页面事件
+function sanitizeTargetInput(value) {
+    return String(value || "").trim().replace(/[^\w-]/g, "")
+}
+
+// 弹窗里点击添加时，复用当前输入的换课来源
+function targetAddFromDialog(courseCode, id) {
+    const swapFromId = sanitizeTargetInput(document.getElementById("input-target-swapFromId").value)
+    targetAdd(courseCode, id, swapFromId)
+}
+
 function buttonTargetAdd() {
-    let id = document.getElementById("input-target").value
-    let courseCode = document.getElementById("input-target-courseCode").value
+    let id = sanitizeTargetInput(document.getElementById("input-target").value)
+    let courseCode = sanitizeTargetInput(document.getElementById("input-target-courseCode").value)
+    let swapFromId = sanitizeTargetInput(document.getElementById("input-target-swapFromId").value)
+
+    // 仅在填写了换课来源时做额外校验
+    if (document.getElementById("input-target-swapFromId").value && !swapFromId) {
+        showMessage("已选课程序号格式不正确")
+        return
+    }
+
     document.getElementById("input-target").value = ""
     document.getElementById("input-target-courseCode").value = ""
+    document.getElementById("input-target-swapFromId").value = ""
 
     if (id && courseCode) {
-        targetAdd(courseCode, id)
+        targetAdd(courseCode, id, swapFromId)
     } else if (courseCode) {
         dialogTargetAddOpen()
 
@@ -312,7 +466,7 @@ function buttonTargetAdd() {
                     <td>${course.roomcode1}</td>
                     <td>${course.priorMajors}</td>
                     <td style="padding: 0.3rem;display: flex;height: 100%;align-items: center;">
-                        <mdui-button-icon icon="add" onclick="targetAdd('${courseCode}','${course.cttId}')"></mdui-button-icon>
+                        <mdui-button-icon icon="add" onclick="targetAddFromDialog('${courseCode}','${course.cttId}')"></mdui-button-icon>
                     </td>
                 </tr>
                 `
@@ -326,13 +480,23 @@ function buttonTargetAdd() {
 
 }
 
-function targetAdd(courseCode, id) {
+function targetAdd(courseCode, id, swapFromId = "") {
+    courseCode = sanitizeTargetInput(courseCode)
+    id = sanitizeTargetInput(id)
+    swapFromId = sanitizeTargetInput(swapFromId)
+
+    if (!courseCode || !id) {
+        showMessage("课程编号或选课序号格式不正确")
+        return
+    }
+
     if (targetList.some(t => t.id == id)) {
         showMessage("该课程已存在于列表中")
     } else {
         targetList.push({
             "id": id,
             "courseCode": courseCode,
+            "swapFromId": swapFromId,
             "name": "",
             "num": "",
             "teacher": "",
