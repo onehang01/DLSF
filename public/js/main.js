@@ -186,6 +186,19 @@ async function selectCourse(cttId) {
     return await api("/selectcourse/scSubmit", { cttId: cttId })
 }
 
+// 换课失败时，尝试把原来的课抢回来
+async function rollbackSwapCourse(target) {
+    if (!target.swapFromId) {
+        return { skipped: true, reason: "no swapFromId" }
+    }
+
+    const result = await selectCourse(target.swapFromId)
+    return {
+        success: isSuccessResult(result),
+        raw: result
+    }
+}
+
 // 判断目标教学班是否还有余量
 function hasAvailableSeat(lessonData) {
     return Number(lessonData.maxCnt) > Number(lessonData.enrollCnt)
@@ -208,6 +221,14 @@ function isSuccessResult(result) {
 // 判断是否命中了验证码风控
 function isCaptchaResult(result) {
     return result && result.msg == "F"
+}
+
+// 判断是否是明确失败的选课结果
+function isExplicitFailureResult(result) {
+    if (!result) {
+        return false
+    }
+    return !isSuccessResult(result) && !isCaptchaResult(result)
 }
 
 // 统一渲染接口返回内容
@@ -248,6 +269,7 @@ async function cancelSwapFromCourse(target) {
     const result = await cancelCourse(target.courseCode, oldLessonData.classNo)
     return {
         success: isSuccessResult(result),
+        didCancel: isSuccessResult(result),
         raw: result
     }
 }
@@ -290,6 +312,7 @@ function switchMain() {
                         }
 
                         // 有换课来源时，先退掉旧老师的课
+                        let didCancelOldCourse = false
                         if (target.swapFromId) {
                             w.children[1].innerHTML = "发现目标课有余量，正在检查旧课..."
                             const cancelResult = await cancelSwapFromCourse(target)
@@ -303,6 +326,8 @@ function switchMain() {
                                 w.children[1].innerHTML = "退课失败，即将重试..."
                                 return
                             }
+
+                            didCancelOldCourse = !!cancelResult.didCancel
 
                             if (cancelResult.skipped && cancelResult.reason == "old course not selected") {
                                 w.children[1].innerHTML = "旧课已不存在，直接尝试选择新老师..."
@@ -325,8 +350,30 @@ function switchMain() {
                             activeWorker = stopWorkerByTarget(target, activeWorker)
                             document.getElementById("switch-main-status").children[2].innerHTML = `脚本运行中 (${activeWorker}/${targetList.length})`
                         } else {
-                            w.children[0].style["background"] = "lightgray"
-                            w.children[1].innerHTML = `抢课失败，即将重试...`
+                            // 只有明确退过旧课且新课明确失败时，才尝试回抢原课
+                            if (didCancelOldCourse && isExplicitFailureResult(selectResult)) {
+                                w.children[1].innerHTML = "目标课未抢到，正在尝试抢回原课..."
+                                const rollbackResult = await rollbackSwapCourse(target)
+                                if (rollbackResult.raw) {
+                                    setWorkerRawText(r, rollbackResult.raw)
+                                }
+
+                                if (isCaptchaResult(rollbackResult.raw)) {
+                                    w.children[0].style["background"] = "lightcoral"
+                                    w.children[1].innerHTML = "回抢原课时出现验证码，本线程已停止！"
+                                    activeWorker = stopWorkerByTarget(target, activeWorker)
+                                    document.getElementById("switch-main-status").children[2].innerHTML = `脚本运行中 (${activeWorker}/${targetList.length})`
+                                } else if (rollbackResult.success) {
+                                    w.children[0].style["background"] = "lightsalmon"
+                                    w.children[1].innerHTML = "目标课未抢到，已成功抢回原课，稍后继续重试..."
+                                } else {
+                                    w.children[0].style["background"] = "lightcoral"
+                                    w.children[1].innerHTML = "目标课未抢到，原课回抢也失败了！"
+                                }
+                            } else {
+                                w.children[0].style["background"] = "lightgray"
+                                w.children[1].innerHTML = `抢课失败，即将重试...`
+                            }
                         }
                     } catch (error) {
                         console.error(error)
