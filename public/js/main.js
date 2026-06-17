@@ -146,8 +146,14 @@ async function loginUser() {
 }
 
 // 获取某门课的全部教学班信息
-async function getAccData(courseCode) {
-    const result = await api("/selectcourse/initACC", { courseCode: courseCode })
+async function getAccData(courseCode, requestKey = "") {
+    // 给并发请求加区分标识，避免不同 worker 互相取消请求
+    const params = { courseCode: courseCode }
+    if (requestKey) {
+        params._ = requestKey
+    }
+
+    const result = await api("/selectcourse/initACC", params)
     if (!result || !result.aaData) {
         return null
     }
@@ -155,21 +161,32 @@ async function getAccData(courseCode) {
 }
 
 // 按选课序号查找教学班详情
-async function getAccLessonByCttId(courseCode, cttId) {
-    const result = await getAccData(courseCode)
+async function getAccLessonByCttId(courseCode, cttId, requestKey = cttId) {
+    const result = await getAccData(courseCode, requestKey)
     if (!result) {
         return null
     }
     return result.aaData.find(course => String(course.cttId) === String(cttId)) || null
 }
 
-// 查询当前是否还选着旧老师的课
-async function getSelectedCourseByCttId(cttId) {
-    const result = await api("/selectcourse/initSelCourses")
+// 获取当前已选课程列表
+async function getSelectedCourseList(requestKey = "") {
+    // 给并发请求加区分标识，避免不同 worker 互相取消请求
+    const params = requestKey ? { _: requestKey } : undefined
+    const result = await api("/selectcourse/initSelCourses", params)
     if (!result || !result.enrollCourses) {
         return null
     }
-    return result.enrollCourses.find(course => String(course.jxbdm) === String(cttId)) || null
+    return result.enrollCourses
+}
+
+// 查询当前是否还选着指定教学班
+async function getSelectedCourseByCttId(cttId, requestKey = cttId) {
+    const enrollCourses = await getSelectedCourseList(requestKey)
+    if (!enrollCourses) {
+        return null
+    }
+    return enrollCourses.find(course => String(course.jxbdm) === String(cttId)) || null
 }
 
 // 调用退课接口
@@ -194,7 +211,7 @@ async function rollbackSwapCourse(target) {
 
     const result = await selectCourse(target.swapFromId)
     return {
-        success: isSuccessResult(result),
+        success: await resolveSelectSuccess(result, target.swapFromId, `rollback-${target.id}-${target.swapFromId}`),
         raw: result
     }
 }
@@ -204,18 +221,72 @@ function hasAvailableSeat(lessonData) {
     return Number(lessonData.maxCnt) > Number(lessonData.enrollCnt)
 }
 
-// 判断是否是成功响应
-function isSuccessResult(result) {
+// 判断选课接口是否成功
+function isSelectSuccessResult(result) {
     if (!result) {
         return false
     }
-    if (result.success === true || result.DLSF_SUCCESS === true) {
+    if (result.success === true) {
         return true
     }
-    if (typeof result.msg === "string" && (result.msg.includes("成功") || result.msg.includes("已经选了"))) {
+    if (typeof result.msg === "string" && result.msg.includes("选课成功")) {
         return true
     }
     return false
+}
+
+// 判断是否是“这门课已经选了”的重复提示
+function isSelectRepeatResult(result) {
+    if (!result || typeof result.msg !== "string") {
+        return false
+    }
+    return result.msg.includes("已经选了") || result.msg.includes("不允许再次选择")
+}
+
+// 判断退课接口是否成功
+function isCancelSuccessResult(result) {
+    if (!result) {
+        return false
+    }
+    if (result.success === true) {
+        return true
+    }
+    if (typeof result.msg === "string" && (
+        result.msg.includes("退课成功") ||
+        result.msg.includes("取消成功")
+    )) {
+        return true
+    }
+    return false
+}
+
+// 对“已选”提示做二次确认，确保真的选中了目标教学班
+async function resolveSelectSuccess(result, cttId, requestKey = cttId) {
+    if (isSelectSuccessResult(result)) {
+        return true
+    }
+    if (isSelectRepeatResult(result)) {
+        const selectedCourse = await getSelectedCourseByCttId(cttId, requestKey)
+        return !!selectedCourse
+    }
+    return false
+}
+
+// 普通抢课模式下，只要同课程任意一个老师已选上，就可以视为成功
+async function resolveNormalModeSelectSuccess(result, target, requestKey = target.id) {
+    if (await resolveSelectSuccess(result, target.id, requestKey)) {
+        return true
+    }
+    if (!isSelectRepeatResult(result)) {
+        return false
+    }
+
+    const enrollCourses = await getSelectedCourseList(`normal-${requestKey}`)
+    if (!enrollCourses) {
+        return false
+    }
+
+    return enrollCourses.some(course => String(course.courseCode) === String(target.courseCode))
 }
 
 // 判断是否命中了验证码风控
@@ -228,7 +299,7 @@ function isExplicitFailureResult(result) {
     if (!result) {
         return false
     }
-    return !isSuccessResult(result) && !isCaptchaResult(result)
+    return !isSelectSuccessResult(result) && !isCaptchaResult(result)
 }
 
 // 统一渲染接口返回内容
@@ -246,18 +317,51 @@ function stopWorkerByTarget(target, activeWorker) {
     return activeWorker - 1
 }
 
+// 目标课失败后，尽量把原来的课抢回来
+async function handleSwapRollback(target, w, r, activeWorker, pendingMessage, successMessage, failureMessage) {
+    try {
+        w.children[1].innerHTML = pendingMessage
+        const rollbackResult = await rollbackSwapCourse(target)
+        if (rollbackResult.raw) {
+            setWorkerRawText(r, rollbackResult.raw)
+        }
+
+        if (isCaptchaResult(rollbackResult.raw)) {
+            w.children[0].style["background"] = "lightcoral"
+            w.children[1].innerHTML = "回抢原课时出现验证码，本线程已停止！"
+            activeWorker = stopWorkerByTarget(target, activeWorker)
+            document.getElementById("switch-main-status").children[2].innerHTML = `脚本运行中 (${activeWorker}/${targetList.length})`
+            return { activeWorker, stopped: true }
+        }
+
+        if (rollbackResult.success) {
+            w.children[0].style["background"] = "lightsalmon"
+            w.children[1].innerHTML = successMessage
+        } else {
+            w.children[0].style["background"] = "lightcoral"
+            w.children[1].innerHTML = failureMessage
+        }
+        return { activeWorker, stopped: false }
+    } catch (error) {
+        console.error(error)
+        w.children[0].style["background"] = "lightcoral"
+        w.children[1].innerHTML = "尝试抢回原课时请求异常！"
+        return { activeWorker, stopped: false }
+    }
+}
+
 // 换课模式下，先退掉当前已选的旧课
 async function cancelSwapFromCourse(target) {
     if (!target.swapFromId) {
         return { skipped: true, reason: "no swapFromId" }
     }
 
-    const selectedCourse = await getSelectedCourseByCttId(target.swapFromId)
+    const selectedCourse = await getSelectedCourseByCttId(target.swapFromId, `selected-${target.id}-${target.swapFromId}`)
     if (!selectedCourse) {
         return { skipped: true, reason: "old course not selected" }
     }
 
-    const oldLessonData = await getAccLessonByCttId(target.courseCode, target.swapFromId)
+    const oldLessonData = await getAccLessonByCttId(target.courseCode, target.swapFromId, `swap-${target.id}-${target.swapFromId}`)
     if (!oldLessonData) {
         return { success: false, reason: "old lesson data not found" }
     }
@@ -268,8 +372,8 @@ async function cancelSwapFromCourse(target) {
 
     const result = await cancelCourse(target.courseCode, oldLessonData.classNo)
     return {
-        success: isSuccessResult(result),
-        didCancel: isSuccessResult(result),
+        success: isCancelSuccessResult(result),
+        didCancel: isCancelSuccessResult(result),
         raw: result
     }
 }
@@ -296,7 +400,7 @@ function switchMain() {
                     r.style["opacity"] = "0.3"
 
                     try {
-                        let lessonData = await getAccLessonByCttId(target.courseCode, target.id)
+                        let lessonData = await getAccLessonByCttId(target.courseCode, target.id, `target-${target.id}`)
                         if (!lessonData) {
                             w.children[0].style["background"] = "lightgray"
                             w.children[1].innerHTML = "课程信息获取失败，即将重试..."
@@ -336,15 +440,61 @@ function switchMain() {
                             }
                         }
 
-                        const selectResult = await selectCourse(target.id)
+                        let selectResult
+                        try {
+                            selectResult = await selectCourse(target.id)
+                        } catch (error) {
+                            // 退课成功后如果请求异常，也要尝试把原课抢回来
+                            if (didCancelOldCourse) {
+                                const rollbackState = await handleSwapRollback(
+                                    target,
+                                    w,
+                                    r,
+                                    activeWorker,
+                                    "目标课请求异常，正在尝试抢回原课...",
+                                    "目标课请求异常，已成功抢回原课，稍后继续重试...",
+                                    "目标课请求异常，原课回抢也失败了！"
+                                )
+                                activeWorker = rollbackState.activeWorker
+                                if (rollbackState.stopped) {
+                                    return
+                                }
+                            } else {
+                                throw error
+                            }
+                            return
+                        }
+
                         setWorkerRawText(r, selectResult)
 
                         if (isCaptchaResult(selectResult)) {
-                            w.children[0].style["background"] = "lightcoral"
-                            w.children[1].innerHTML = `出现验证码，请降低请求速度，本线程已停止！`
-                            activeWorker = stopWorkerByTarget(target, activeWorker)
-                            document.getElementById("switch-main-status").children[2].innerHTML = `脚本运行中 (${activeWorker}/${targetList.length})`
-                        } else if (isSuccessResult(selectResult)) {
+                            // 已经退过旧课时，先尝试把原课抢回来再停掉线程
+                            if (didCancelOldCourse) {
+                                const rollbackState = await handleSwapRollback(
+                                    target,
+                                    w,
+                                    r,
+                                    activeWorker,
+                                    "目标课触发验证码，正在尝试抢回原课...",
+                                    "目标课触发验证码，已成功抢回原课，本线程已停止！",
+                                    "目标课触发验证码，原课回抢失败，本线程已停止！"
+                                )
+                                activeWorker = rollbackState.activeWorker
+                                if (!rollbackState.stopped) {
+                                    activeWorker = stopWorkerByTarget(target, activeWorker)
+                                    document.getElementById("switch-main-status").children[2].innerHTML = `脚本运行中 (${activeWorker}/${targetList.length})`
+                                }
+                            } else {
+                                w.children[0].style["background"] = "lightcoral"
+                                w.children[1].innerHTML = `出现验证码，请降低请求速度，本线程已停止！`
+                                activeWorker = stopWorkerByTarget(target, activeWorker)
+                                document.getElementById("switch-main-status").children[2].innerHTML = `脚本运行中 (${activeWorker}/${targetList.length})`
+                            }
+                        } else if (
+                            target.swapFromId
+                                ? await resolveSelectSuccess(selectResult, target.id, `verify-${target.id}`)
+                                : await resolveNormalModeSelectSuccess(selectResult, target, `verify-${target.id}`)
+                        ) {
                             w.children[0].style["background"] = "lightgreen"
                             w.children[1].innerHTML = target.swapFromId ? `换课成功！` : `抢课成功！`
                             activeWorker = stopWorkerByTarget(target, activeWorker)
@@ -352,23 +502,18 @@ function switchMain() {
                         } else {
                             // 只有明确退过旧课且新课明确失败时，才尝试回抢原课
                             if (didCancelOldCourse && isExplicitFailureResult(selectResult)) {
-                                w.children[1].innerHTML = "目标课未抢到，正在尝试抢回原课..."
-                                const rollbackResult = await rollbackSwapCourse(target)
-                                if (rollbackResult.raw) {
-                                    setWorkerRawText(r, rollbackResult.raw)
-                                }
-
-                                if (isCaptchaResult(rollbackResult.raw)) {
-                                    w.children[0].style["background"] = "lightcoral"
-                                    w.children[1].innerHTML = "回抢原课时出现验证码，本线程已停止！"
-                                    activeWorker = stopWorkerByTarget(target, activeWorker)
-                                    document.getElementById("switch-main-status").children[2].innerHTML = `脚本运行中 (${activeWorker}/${targetList.length})`
-                                } else if (rollbackResult.success) {
-                                    w.children[0].style["background"] = "lightsalmon"
-                                    w.children[1].innerHTML = "目标课未抢到，已成功抢回原课，稍后继续重试..."
-                                } else {
-                                    w.children[0].style["background"] = "lightcoral"
-                                    w.children[1].innerHTML = "目标课未抢到，原课回抢也失败了！"
+                                const rollbackState = await handleSwapRollback(
+                                    target,
+                                    w,
+                                    r,
+                                    activeWorker,
+                                    "目标课未抢到，正在尝试抢回原课...",
+                                    "目标课未抢到，已成功抢回原课，稍后继续重试...",
+                                    "目标课未抢到，原课回抢也失败了！"
+                                )
+                                activeWorker = rollbackState.activeWorker
+                                if (rollbackState.stopped) {
+                                    return
                                 }
                             } else {
                                 w.children[0].style["background"] = "lightgray"
@@ -471,8 +616,7 @@ function sanitizeTargetInput(value) {
 }
 
 // 弹窗里点击添加时，复用当前输入的换课来源
-function targetAddFromDialog(courseCode, id) {
-    const swapFromId = sanitizeTargetInput(document.getElementById("input-target-swapFromId").value)
+function targetAddFromDialog(courseCode, id, swapFromId = "") {
     targetAdd(courseCode, id, swapFromId)
 }
 
@@ -513,7 +657,7 @@ function buttonTargetAdd() {
                     <td>${course.roomcode1}</td>
                     <td>${course.priorMajors}</td>
                     <td style="padding: 0.3rem;display: flex;height: 100%;align-items: center;">
-                        <mdui-button-icon icon="add" onclick="targetAddFromDialog('${courseCode}','${course.cttId}')"></mdui-button-icon>
+                        <mdui-button-icon icon="add" onclick="targetAddFromDialog('${courseCode}','${course.cttId}','${swapFromId}')"></mdui-button-icon>
                     </td>
                 </tr>
                 `
@@ -589,7 +733,7 @@ function targetRefresh(courseCode, id) {
     target.info = "..."
     targetListRender()
 
-    api("/selectcourse/initACC", { courseCode: courseCode }).then((result) => {
+    api("/selectcourse/initACC", { courseCode: courseCode, _: id }).then((result) => {
         lessonData = result.aaData.filter(course => course.cttId == id)[0]
         target.name = lessonData.crName
         target.num = `${lessonData.maxCnt}/${lessonData.applyCnt}/${lessonData.enrollCnt}`
