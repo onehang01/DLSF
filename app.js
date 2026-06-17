@@ -167,6 +167,53 @@ app.post('/api/selectcourse/scSubmit', (req, res) => {
         })
 })
 
+//退课接口
+app.post('/api/selectcourse/cancelSC', (req, res) => {
+    const body = new URLSearchParams({
+        courseCode: req.query.courseCode,
+        classNo: req.query.classNo,
+        cancelType: req.query.cancelType || "1"
+    }).toString()
+
+    let config = {
+        method: 'POST',
+        headers: {
+            'Cookie': `JSESSIONID=${req.query.j};newjwgl=${req.query.a};`,
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36',
+            'Host': 'jwgl.dhu.edu.cn',
+            'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8',
+            'X-Requested-With': 'XMLHttpRequest',
+            'Origin': 'https://jwgl.dhu.edu.cn',
+            'Referer': 'https://jwgl.dhu.edu.cn/dhu/selectcourse/toSSC'
+        },
+        body: body
+    }
+
+    fetch("https://jwgl.dhu.edu.cn/dhu/selectcourse/cancelSC", config)
+        .then(response => response.text())
+        .then(result => {
+            let j
+            try {
+                j = JSON.parse(result)
+                logger.info("API OK /api/selectcourse/cancelSC", {
+                    "courseCode": req.query.courseCode,
+                    "classNo": req.query.classNo
+                })
+                res.json(j)
+            } catch (error) {
+                logger.error("/api/selectcourse/cancelSC 解析 JSON 失败：")
+                console.log(error)
+                res.json({ "DLSF_SUCCESS": false })
+            }
+        })
+        .catch(error => {
+            logger.error("/api/selectcourse/cancelSC 请求失败：")
+            console.log(error)
+            res.json({ "DLSF_SUCCESS": false })
+        })
+})
+
+
 app.get('/api/common/semesterSS', (req, res) => {
     let config = {
         method: 'POST',

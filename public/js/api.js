@@ -44,6 +44,7 @@ async function api(target, params) {
         "/dlsf/loginGetToken": "GET",
         "/selectcourse/initACC": "GET",
         "/selectcourse/scSubmit": "POST",
+        "/selectcourse/cancelSC": "POST",
         "/common/semesterSS": "GET",
         "/StudentCourseTable/getData": "GET",
         "/dlsf/version": "GET",
