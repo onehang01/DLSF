@@ -8,7 +8,12 @@
     <mdui-text-field id="input-target-courseCode" style="width: 15rem;max-width: 100%;" clearable label="课程编号"
       value=""></mdui-text-field>
     <mdui-text-field id="input-target" style="width: 15rem;max-width: 100%;" clearable label="选课序号（可选）" value=""></mdui-text-field>
-    <mdui-text-field id="input-target-swapFromId" style="width: 18rem;max-width: 100%;" clearable label="已选课程序号（换老师时填写）" value=""></mdui-text-field>
+    <div style="display: flex;align-items: center;gap: 0.35rem;max-width: 100%;">
+      <mdui-text-field id="input-target-swapFromId" style="width: 18rem;max-width: 100%;" clearable label="已选课程序号（换老师时填写）" value=""></mdui-text-field>
+      <mdui-tooltip content="换课模式下，脚本会先检测目标老师是否有余量；有余量时，再退掉你当前已选的这门课，并立即尝试选择目标老师。">
+        <mdui-button-icon icon="help_outline"></mdui-button-icon>
+      </mdui-tooltip>
+    </div>
     <mdui-button onclick="buttonTargetAdd()">添加</mdui-button>
   </div>
 
